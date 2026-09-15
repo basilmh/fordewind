@@ -1,0 +1,39 @@
+# Local environment and credentials
+/.env
+/.env.*
+!/.env.example
+/auth.json
+
+# PHP and JavaScript dependencies
+/vendor/
+/node_modules/
+
+# Generated frontend and Laravel public files
+/public/build/
+/public/hot
+/public/storage
+
+# External source data and imported images
+/data/
+/storage/app/public/cars/
+
+# Runtime files, logs, test output and coverage
+*.log
+/.phpunit.cache/
+/.phpunit.result.cache
+/coverage/
+/storage/*.key
+/storage/pail/
+
+# IDE and OS files
+/.fleet/
+/.idea/
+/.vscode/
+/.zed/
+.phpactor.json
+.DS_Store
+Thumbs.db
+
+# Laravel Sail and Homestead local files
+Homestead.json
+Homestead.yaml

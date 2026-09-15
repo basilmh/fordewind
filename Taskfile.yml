@@ -1,0 +1,161 @@
+version: '3'
+
+env:
+  COMPOSE_CMD: docker compose --env-file .env
+  APP_CONTAINER: app
+
+tasks:
+  default:
+    desc: Show available commands
+    cmds:
+      - task --list-all
+    silent: true
+
+  _check-env:
+    internal: true
+    preconditions:
+      - sh: test -f .env
+        msg: '.env is missing. Create it with: cp .env.example .env'
+
+  _check-running:
+    internal: true
+    deps: [_check-env]
+    preconditions:
+      - sh: '{{.COMPOSE_CMD}} ps -q {{.APP_CONTAINER}} | grep -q .'
+        msg: 'The app container is not running. Start it with: task up'
+
+  _check-test-db:
+    internal: true
+    deps: [_check-env]
+    preconditions:
+      - sh: '{{.COMPOSE_CMD}} ps --status running -q mysql-test | grep -q .'
+        msg: 'The mysql-test container is not running. Start it with: task up'
+
+  _ensure-dirs:
+    internal: true
+    cmds:
+      - mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
+
+  init:
+    desc: Initialize the project from a fresh checkout
+    deps: [_check-env, _ensure-dirs]
+    cmds:
+      - task: up
+      - task: composer-install
+      - task: npm-install
+      - task: key
+      - task: migrate
+      - task: storage-link
+      - task: build
+
+  up:
+    desc: Start local services
+    deps: [_check-env]
+    cmds:
+      - '{{.COMPOSE_CMD}} up -d --build --remove-orphans'
+
+  stop:
+    desc: Stop local services
+    cmds:
+      - '{{.COMPOSE_CMD}} down --remove-orphans'
+
+  ps:
+    desc: Show service status
+    cmds:
+      - '{{.COMPOSE_CMD}} ps'
+
+  logs:
+    desc: "Follow service logs, for example: task logs -- app"
+    cmds:
+      - '{{.COMPOSE_CMD}} logs -f {{.CLI_ARGS}}'
+
+  bash:
+    desc: Open a shell in the application container
+    deps: [_check-running]
+    interactive: true
+    cmds:
+      - '{{.COMPOSE_CMD}} exec {{.APP_CONTAINER}} sh'
+
+  artisan:
+    desc: "Run Artisan, for example: task artisan -- route:list"
+    deps: [_check-running]
+    cmds:
+      - '{{.COMPOSE_CMD}} exec -T {{.APP_CONTAINER}} sh -c "{{.ENV}} php artisan {{.CLI_ARGS}}"'
+
+  composer:
+    desc: Run Composer in the application container
+    deps: [_check-running]
+    cmds:
+      - '{{.COMPOSE_CMD}} exec -T {{.APP_CONTAINER}} composer {{.CLI_ARGS}}'
+
+  composer-install:
+    desc: Install PHP dependencies
+    cmds:
+      - task: composer
+        vars: {CLI_ARGS: 'install'}
+
+  npm-install:
+    desc: Install frontend dependencies in the Node 22 container
+    deps: [_check-env]
+    cmds:
+      - '{{.COMPOSE_CMD}} run --rm frontend npm install'
+
+  build:
+    desc: Build Vue and jQuery frontend assets
+    deps: [_check-env]
+    cmds:
+      - '{{.COMPOSE_CMD}} run --rm frontend npm run build'
+
+  dev:
+    desc: Start the Vite development server in the Node 22 container
+    deps: [_check-env]
+    cmds:
+      - '{{.COMPOSE_CMD}} run --rm --service-ports frontend npm run dev -- --host 0.0.0.0'
+
+  key:
+    desc: Generate APP_KEY
+    cmds:
+      - task: artisan
+        vars: {CLI_ARGS: 'key:generate --force'}
+
+  migrate:
+    desc: Run database migrations
+    cmds:
+      - task: artisan
+        vars: {CLI_ARGS: 'migrate'}
+
+  fresh:
+    desc: Recreate the local database and run seeders
+    cmds:
+      - task: artisan
+        vars: {CLI_ARGS: 'migrate:fresh --seed'}
+
+  seed:
+    desc: Run database seeders
+    cmds:
+      - task: artisan
+        vars: {CLI_ARGS: 'db:seed'}
+
+  storage-link:
+    desc: Create the public storage symlink
+    cmds:
+      - task: artisan
+        vars: {CLI_ARGS: 'storage:link'}
+
+  test:
+    desc: Run PHPUnit tests against the isolated MySQL test database
+    deps: [_check-running, _check-test-db]
+    cmds:
+      - '{{.COMPOSE_CMD}} exec -T {{.APP_CONTAINER}} sh docker/scripts/test.sh {{.CLI_ARGS}}'
+
+  pint:
+    desc: Check PHP formatting
+    cmds:
+      - task: composer
+        vars: {CLI_ARGS: 'run lint'}
+
+  pint-fix:
+    desc: Format PHP files
+    cmds:
+      - task: composer
+        vars: {CLI_ARGS: 'run lint:fix'}

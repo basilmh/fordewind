@@ -1,0 +1,88 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - '${APP_PORT:-8080}:80'
+    volumes:
+      - .:/var/www:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_started
+    networks:
+      - fordewind
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        APP_USER: fordewind
+        USER_ID: '${USER_ID:-1000}'
+        GROUP_ID: '${GROUP_ID:-1000}'
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    environment:
+      PHP_IDE_CONFIG: serverName=fordewind
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mysql-test:
+        condition: service_healthy
+    networks:
+      - fordewind
+
+  mysql:
+    image: mysql:8.4
+    ports:
+      - '${FORWARD_DB_PORT:-33063}:3306'
+    environment:
+      MYSQL_DATABASE: '${DB_DATABASE:-fordewind}'
+      MYSQL_USER: '${DB_USERNAME:-fordewind}'
+      MYSQL_PASSWORD: '${DB_PASSWORD:-secret}'
+      MYSQL_ROOT_PASSWORD: '${DB_ROOT_PASSWORD:-root}'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-p$${MYSQL_ROOT_PASSWORD}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - fordewind
+
+  mysql-test:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: '${DB_TEST_DATABASE:-fordewind_testing}'
+      MYSQL_USER: '${DB_TEST_USERNAME:-fordewind}'
+      MYSQL_PASSWORD: '${DB_TEST_PASSWORD:-secret}'
+      MYSQL_ROOT_PASSWORD: '${DB_TEST_ROOT_PASSWORD:-root}'
+    volumes:
+      - mysql-test-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-p$${MYSQL_ROOT_PASSWORD}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - fordewind
+
+  frontend:
+    image: node:22-alpine
+    profiles: ['tools']
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    ports:
+      - '${VITE_PORT:-5174}:5173'
+    networks:
+      - fordewind
+
+volumes:
+  mysql-data:
+  mysql-test-data:
+
+networks:
+  fordewind:
