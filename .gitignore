@@ -15,7 +15,7 @@
 
 # External source data and imported images
 /data/
-/storage/app/public/cars/
+/public/images/cars/
 
 # Runtime files, logs, test output and coverage
 *.log

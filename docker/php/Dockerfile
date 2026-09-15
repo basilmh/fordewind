@@ -6,7 +6,7 @@ ARG APP_USER=fordewind
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-RUN apk add --no-cache icu-dev libzip-dev oniguruma-dev zip \
+RUN apk add --no-cache git icu-dev libzip-dev oniguruma-dev zip \
     && docker-php-ext-install intl mbstring pdo_mysql zip
 
 RUN addgroup -g "${GROUP_ID}" "${APP_USER}" \

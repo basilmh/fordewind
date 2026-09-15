@@ -136,6 +136,12 @@ tasks:
       - task: artisan
         vars: {CLI_ARGS: 'db:seed'}
 
+  import:
+    desc: Clone/update source data, publish JPG images, and import cars into the dev database
+    cmds:
+      - task: artisan
+        vars: {CLI_ARGS: 'cars:import {{.CLI_ARGS}}'}
+
   storage-link:
     desc: Create the public storage symlink
     cmds:
@@ -159,3 +165,9 @@ tasks:
     cmds:
       - task: composer
         vars: {CLI_ARGS: 'run lint:fix'}
+
+  ide-helper:
+    desc: Generate IDE helper files and Eloquent model PHPDoc
+    cmds:
+      - task: composer
+        vars: {CLI_ARGS: 'run generate-ide-helpers'}

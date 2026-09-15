@@ -50,6 +50,9 @@ task init
 - `DB_TEST_*` - подключение к изолированной БД тестов.
 - `CARS_IMPORT_REPOSITORY` - URL Git-репозитория с исходными JSON;
 - `CARS_IMPORT_SOURCE_PATH` - каталог, в который `task import` клонирует репозиторий и из которого читает JSON.
+- `CARS_IMPORT_BATCH_SIZE` - размер чанка импорта, по умолчанию `200`;
+- `CARS_IMPORT_IMAGES_PATH` - каталог JPG-изображений в источнике; если не задан, используется `CARS_IMPORT_SOURCE_PATH`;
+- `CARS_PUBLIC_IMAGES_PATH` - каталог назначения изображений в `public`;
 
 Не добавляйте `.env` в Git. Шаблон содержит только локальные значения разработки без реальных секретов.
 

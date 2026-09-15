@@ -23,11 +23,11 @@
 | `task seed` | Запустить сидеры основной dev БД |
 | `task fresh` | Пересоздать основную dev БД и применить сиды |
 | `task storage-link` | Создать публичную ссылку на storage |
-| `task import` | Клонировать/обновить исходные JSON и импортировать автомобили |
+| `task import` | Клонировать/обновить исходные JSON, скопировать JPG в public и импортировать автомобили |
 
 `task fresh` удаляет данные только из основной dev БД.
 
-`task import` использует `CARS_IMPORT_REPOSITORY` и `CARS_IMPORT_SOURCE_PATH`. Команда записывает данные JSON в БД и только сохраняет имя файла изображения; изображения не копируются в public на этом этапе.
+`task import` использует `CARS_IMPORT_REPOSITORY`, `CARS_IMPORT_SOURCE_PATH`, `CARS_IMPORT_BATCH_SIZE`, `CARS_IMPORT_IMAGES_PATH` и `CARS_PUBLIC_IMAGES_PATH`. Команда обрабатывает JSON чанками, пропускает некорректные записи и копирует файл в `public/images/cars/{auction_item_id}/{image_filename}`.
 
 ## Frontend
 
@@ -44,5 +44,6 @@
 | `task test` | Запустить PHPUnit против изолированной БД `mysql-test` |
 | `task pint` | Проверить форматирование PHP |
 | `task pint-fix` | Исправить форматирование PHP |
+| `task ide-helper` | Сгенерировать IDE helper, PHPDoc Eloquent-моделей и PhpStorm meta |
 
 Полный перечень команд и их описание: `task --list-all`.

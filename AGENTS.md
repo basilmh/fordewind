@@ -14,7 +14,7 @@
 - `cp .env.example .env` and `task init` initialize a local installation.
 - `task up`, `task stop`, `task logs -- app`, `task ps` manage Docker services.
 - `task artisan -- route:list`, `task composer -- require vendor/package`, and `task bash` run application-container commands.
-- `task migrate`, `task seed`, `task import`, `task test`, `task pint`, and `task build` run the primary development workflows.
+- `task migrate`, `task seed`, `task import`, `task test`, `task pint`, `task ide-helper`, and `task build` run the primary development workflows.
 
 ## Architecture
 
