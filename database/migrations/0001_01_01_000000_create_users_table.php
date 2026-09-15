@@ -6,11 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private function canRunMigration(): bool
+    {
+        return !Schema::hasTable('users')
+            && !Schema::hasTable('password_reset_tokens')
+            && !Schema::hasTable('sessions');
+    }
+
     /**
      * Run the migrations.
      */
     public function up(): void
     {
+        if (!$this->canRunMigration()) {
+            return;
+        }
+
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fordewind Tests"
+  short_description: "PHPUnit tests for voting and statistics"
+  default_prompt: "Use $fordewind-tests to add or review tests for this change."

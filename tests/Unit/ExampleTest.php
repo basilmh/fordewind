@@ -3,13 +3,14 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\TestDox;
 
 class ExampleTest extends TestCase
 {
-    /**
-     * A basic test example.
-     */
-    public function test_that_true_is_true(): void
+    #[Test]
+    #[TestDox('базовое утверждение истинно')]
+    public function basicAssertionIsTrue(): void
     {
         $this->assertTrue(true);
     }

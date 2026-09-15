@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fordewind Reflect"
+  short_description: "Evidence-based retrospective for project rules"
+  default_prompt: "Use $fordewind-reflect to review this session and propose reusable improvements."

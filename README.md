@@ -48,6 +48,8 @@ task init
 - `USER_ID` и `GROUP_ID` - UID/GID пользователя хоста. Значения по умолчанию `1000` подходят для стандартного Linux-окружения;
 - `DB_*` - подключение к основной dev БД;
 - `DB_TEST_*` - подключение к изолированной БД тестов.
+- `CARS_IMPORT_REPOSITORY` - URL Git-репозитория с исходными JSON;
+- `CARS_IMPORT_SOURCE_PATH` - каталог, в который `task import` клонирует репозиторий и из которого читает JSON.
 
 Не добавляйте `.env` в Git. Шаблон содержит только локальные значения разработки без реальных секретов.
 
@@ -74,3 +76,5 @@ Vue 3 подключён через `@vitejs/plugin-vue`. Отдельные ent
 ## Использование ИИ
 
 История фактически использованных запросов ИИ ведётся единым списком в [docs/ai-artifacts/prompt-history.md](docs/ai-artifacts/prompt-history.md).
+
+Настройки и инструкции агента: [AGENTS.md](AGENTS.md). Применяемые project-specific skills: [.agents/README.md](.agents/README.md).

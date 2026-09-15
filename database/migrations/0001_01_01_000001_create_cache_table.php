@@ -6,11 +6,21 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private function canRunMigration(): bool
+    {
+        return !Schema::hasTable('cache')
+            && !Schema::hasTable('cache_locks');
+    }
+
     /**
      * Run the migrations.
      */
     public function up(): void
     {
+        if (!$this->canRunMigration()) {
+            return;
+        }
+
         Schema::create('cache', function (Blueprint $table) {
             $table->string('key')->primary();
             $table->mediumText('value');

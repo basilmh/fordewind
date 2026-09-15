@@ -6,11 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private function canRunMigration(): bool
+    {
+        return !Schema::hasTable('jobs')
+            && !Schema::hasTable('job_batches')
+            && !Schema::hasTable('failed_jobs');
+    }
+
     /**
      * Run the migrations.
      */
     public function up(): void
     {
+        if (!$this->canRunMigration()) {
+            return;
+        }
+
         Schema::create('jobs', function (Blueprint $table) {
             $table->id();
             $table->string('queue')->index();

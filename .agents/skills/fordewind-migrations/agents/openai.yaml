@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fordewind Migrations"
+  short_description: "Safe Laravel and MySQL migration workflow"
+  default_prompt: "Use $fordewind-migrations to design or review this database change."

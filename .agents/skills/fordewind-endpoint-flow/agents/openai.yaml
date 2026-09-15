@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fordewind Endpoint Flow"
+  short_description: "End-to-end JSON endpoint workflow"
+  default_prompt: "Use $fordewind-endpoint-flow to add this voting or statistics endpoint."
