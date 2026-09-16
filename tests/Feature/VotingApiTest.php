@@ -33,28 +33,19 @@ class VotingApiTest extends TestCase
     }
 
     #[Test]
-    #[TestDox('не повторяет автомобили в цикле голосования, пока доступны две новые фотографии')]
-    public function returnsUniqueCarsUntilTheVotingCycleIsExhausted(): void
+    #[TestDox('возвращает одну активную пару повторно без создания нового токена')]
+    public function returnsTheActiveVotingPairIdempotently(): void
     {
-        $this->createCars('X5', 4);
+        [$leftCar, $rightCar] = $this->createCars('X5', 2);
+        $pairToken = str_repeat('a', 64);
 
-        $firstPair = $this->withSession([])
+        $this->withSession($this->currentPairSession('X5', $leftCar, $rightCar, $pairToken))
             ->getJson(route('api.voting.pair', ['model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'ready')
-            ->assertJsonStructure(['data' => ['pair_token']]);
-        $firstPairIds = $this->pairIds($firstPair->json('data'));
-
-        $secondPair = $this->withSession([
-            'voting.shown_car_ids_by_model' => ['X5' => $firstPairIds],
-        ])->getJson(route('api.voting.pair', ['model' => 'X5']))
-            ->assertOk()
-            ->assertJsonPath('data.status', 'ready');
-        $secondPairIds = $this->pairIds($secondPair->json('data'));
-
-        $this->assertCount(2, $firstPairIds);
-        $this->assertCount(2, $secondPairIds);
-        $this->assertSame([], array_values(array_intersect($firstPairIds, $secondPairIds)));
+            ->assertJsonPath('data.pair_token', $pairToken)
+            ->assertJsonPath('data.left_car.id', $leftCar->id)
+            ->assertJsonPath('data.right_car.id', $rightCar->id);
     }
 
     #[Test]
@@ -76,17 +67,15 @@ class VotingApiTest extends TestCase
     {
         [$firstCar, $secondCar, $lastCar] = $this->createCars('X5', 3);
 
-        $pair = $this->withSession([
-            'voting.shown_car_ids_by_model' => ['X5' => [$firstCar->id, $secondCar->id]],
-        ])->getJson(route('api.voting.pair', ['model' => 'X5']))
+        $pair = $this->withSession($this->cycleSession('X5', $firstCar, $secondCar, 2, 3))
+            ->getJson(route('api.voting.pair', ['model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'ready');
 
         $this->assertContains($lastCar->id, $this->pairIds($pair->json('data')));
 
-        $this->withSession([
-            'voting.shown_car_ids_by_model' => ['X5' => [$firstCar->id, $secondCar->id, $lastCar->id]],
-        ])->getJson(route('api.voting.pair', ['model' => 'X5']))
+        $this->withSession($this->cycleSession('X5', $firstCar, $lastCar, 3, 3))
+            ->getJson(route('api.voting.pair', ['model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'exhausted')
             ->assertJsonPath('data.pair_token', null);
@@ -122,7 +111,8 @@ class VotingApiTest extends TestCase
 
         $response->assertOk()
             ->assertJsonStructure(['data' => ['csrf_token']])
-            ->assertSessionMissing('voting.shown_car_ids_by_model');
+            ->assertSessionMissing('voting.cycles_by_model')
+            ->assertSessionMissing('voting.current_pair_by_model');
     }
 
     #[Test]
@@ -185,6 +175,29 @@ class VotingApiTest extends TestCase
     }
 
     #[Test]
+    #[TestDox('отклоняет голос по устаревшей паре, если в сессии уже активна другая')]
+    public function rejectsVoteForStaleVotingPair(): void
+    {
+        [$staleLeftCar, $staleRightCar, $currentLeftCar, $currentRightCar] = $this->createCars('X5', 4);
+        $stalePairToken = str_repeat('a', 64);
+        $currentPairToken = str_repeat('b', 64);
+        $session = $this->currentPairSession('X5', $currentLeftCar, $currentRightCar, $currentPairToken);
+
+        $this->withSession($session)
+            ->postJson(route('api.voting.votes.store'), [
+                'model' => 'X5',
+                'left_car_id' => $staleLeftCar->id,
+                'right_car_id' => $staleRightCar->id,
+                'winner_side' => 'left',
+                'pair_token' => $stalePairToken,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('left_car_id');
+
+        $this->assertDatabaseCount('votes', 0);
+    }
+
+    #[Test]
     #[TestDox('отклоняет повторную отправку ранее использованной пары')]
     public function rejectsReplayOfAnAlreadySubmittedPair(): void
     {
@@ -216,7 +229,7 @@ class VotingApiTest extends TestCase
     public function rateLimitsVoteSubmissionRequests(): void
     {
         Cache::flush();
-        config()->set('voting.rate_limits.ip_minute.max_attempts', 3);
+        config()->set('voting.rate_limits.votes.ip_minute.max_attempts', 3);
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
             $this->postJson(route('api.voting.votes.store'), [])
@@ -230,13 +243,32 @@ class VotingApiTest extends TestCase
     }
 
     #[Test]
+    #[TestDox('ограничивает частоту запросов на получение пары')]
+    public function rateLimitsVotingPairRequests(): void
+    {
+        Cache::flush();
+        config()->set('voting.rate_limits.pairs.ip_minute.max_attempts', 2);
+        $this->createCars('X5', 2);
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $this->getJson(route('api.voting.pair', ['model' => 'X5']))
+                ->assertOk();
+        }
+
+        $this->getJson(route('api.voting.pair', ['model' => 'X5']))
+            ->assertTooManyRequests()
+            ->assertJsonPath('message', 'Too many voting pair requests.')
+            ->assertJsonPath('errors', []);
+    }
+
+    #[Test]
     #[TestDox('фильтрует статистику, считает голоса в SQL и возвращает метаданные пагинации')]
     public function filtersStatisticsAndReturnsVoteAggregation(): void
     {
         [$firstBmw, $secondBmw] = $this->createCars('X5', 2, [2001, 2005]);
         [$audi] = $this->createCars('A4', 1, [2010]);
         $this->createVote($firstBmw, $secondBmw, 2);
-        $this->createVote($secondBmw, $firstBmw);
+        $this->createVote($secondBmw, $firstBmw, 3);
         $this->createVote($audi, $firstBmw, 3);
 
         $this->getJson(route('api.statistics.index', [
@@ -246,11 +278,12 @@ class VotingApiTest extends TestCase
             'per_page' => 1,
         ]))->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.votes_received', 2)
+            ->assertJsonPath('data.0.id', $secondBmw->id)
+            ->assertJsonPath('data.0.votes_received', 3)
             ->assertJsonPath('meta.current_page', 1)
             ->assertJsonPath('meta.last_page', 2)
             ->assertJsonPath('meta.total_cars', 2)
-            ->assertJsonPath('meta.total_votes', 3);
+            ->assertJsonPath('meta.total_votes', 5);
     }
 
     #[Test]
@@ -307,13 +340,32 @@ class VotingApiTest extends TestCase
             ]);
     }
 
-    /** @return array<string, array<string, array<string, list<int>>>> */
+    /** @return array<string, array<string, array{car_ids: list<int>, pair_token: string}>> */
     private function currentPairSession(string $model, Car $leftCar, Car $rightCar, string $pairToken): array
     {
         return [
-            'voting.current_pairs_by_model' => [
-                $model => [hash('sha256', $pairToken) => [$leftCar->id, $rightCar->id]],
+            'voting.current_pair_by_model' => [
+                $model => [
+                    'car_ids' => [$leftCar->id, $rightCar->id],
+                    'pair_token' => $pairToken,
+                ],
             ],
+        ];
+    }
+
+    /** @return array<string, array<string, array{first_car_id: int, last_car_id: int, shown_cars_count: int, total_cars: int}>> */
+    private function cycleSession(string $model, Car $firstCar, Car $lastCar, int $shownCarsCount, int $totalCars): array
+    {
+        return [
+            'voting.cycles_by_model' => [
+                $model => [
+                    'first_car_id' => $firstCar->id,
+                    'last_car_id' => $lastCar->id,
+                    'shown_cars_count' => $shownCarsCount,
+                    'total_cars' => $totalCars,
+                ],
+            ],
+            'voting.current_pair_by_model' => [],
         ];
     }
 

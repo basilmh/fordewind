@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 
 final readonly class StoreVoteAction
 {
-    private const string CURRENT_PAIR_SESSION_KEY = 'voting.current_pairs_by_model';
+    private const string CURRENT_PAIR_SESSION_KEY = 'voting.current_pair_by_model';
 
     public function __construct(private Session $session) {}
 
@@ -52,7 +52,7 @@ final readonly class StoreVoteAction
                     'pair_hash' => $this->pairHash($leftCarId, $rightCarId),
                 ]);
 
-                $this->forgetCurrentPair($model, $pairTokenHash);
+                $this->forgetCurrentPair($model);
 
                 return $vote;
             });
@@ -71,16 +71,21 @@ final readonly class StoreVoteAction
     private function ensureCurrentPair(string $model, int $leftCarId, int $rightCarId, string $pairTokenHash): void
     {
         $pairsByModel = $this->session->get(self::CURRENT_PAIR_SESSION_KEY, []);
-        $currentPair = is_array($pairsByModel) ? ($pairsByModel[$model][$pairTokenHash] ?? null) : null;
+        $currentPair = is_array($pairsByModel) ? ($pairsByModel[$model] ?? null) : null;
 
-        if ($currentPair !== [$leftCarId, $rightCarId]) {
+        if (
+            !is_array($currentPair)
+            || ($currentPair['car_ids'] ?? null) !== [$leftCarId, $rightCarId]
+            || !is_string($currentPair['pair_token'] ?? null)
+            || !hash_equals(hash('sha256', $currentPair['pair_token']), $pairTokenHash)
+        ) {
             throw ValidationException::withMessages([
                 'left_car_id' => 'The submitted cars are not the current voting pair.',
             ]);
         }
     }
 
-    private function forgetCurrentPair(string $model, string $pairTokenHash): void
+    private function forgetCurrentPair(string $model): void
     {
         $pairsByModel = $this->session->get(self::CURRENT_PAIR_SESSION_KEY, []);
 
@@ -88,11 +93,7 @@ final readonly class StoreVoteAction
             return;
         }
 
-        unset($pairsByModel[$model][$pairTokenHash]);
-
-        if ($pairsByModel[$model] === []) {
-            unset($pairsByModel[$model]);
-        }
+        unset($pairsByModel[$model]);
 
         $this->session->put(self::CURRENT_PAIR_SESSION_KEY, $pairsByModel);
     }

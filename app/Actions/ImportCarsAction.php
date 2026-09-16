@@ -14,6 +14,7 @@ use App\Tasks\ValidateCarImportImageTask;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -33,59 +34,62 @@ final readonly class ImportCarsAction
     ): CarImportResultData {
         $progress = new CarImportProgress;
         $batch = [];
-        $duplicateCacheKeyPrefix = 'car-import:seen:' . Str::uuid();
-        $duplicateCacheExpiresAt = now()->addSeconds($this->duplicateCacheTtl());
+        $duplicateDirectory = $this->duplicateDirectory();
 
-        foreach ($this->readCarImportRecords->run($sourcePath) as $readResult) {
-            if ($readResult->error !== null) {
-                $progress->skip($readResult->error);
+        try {
+            foreach ($this->readCarImportRecords->run($sourcePath) as $readResult) {
+                if ($readResult->error !== null) {
+                    $progress->skip($readResult->error);
 
-                continue;
+                    continue;
+                }
+
+                $record = $readResult->record;
+
+                if ($record === null) {
+                    $progress->skip('Import record is missing.');
+
+                    continue;
+                }
+
+                if ($this->isDuplicateAuctionItemId($duplicateDirectory, $record->sourceData->auctionItemId)) {
+                    $progress->skip("{$record->sourceData->auctionItemId}: duplicate AuctionItemId in source.");
+
+                    continue;
+                }
+
+                $imageError = $this->validateCarImportImage->run($record, $imageSourcePath);
+
+                if ($imageError !== null) {
+                    $progress->skip($imageError);
+
+                    continue;
+                }
+
+                $batch[] = $record;
+
+                if (count($batch) < $batchSize) {
+                    continue;
+                }
+
+                $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
+                $batch = [];
             }
 
-            $record = $readResult->record;
-
-            if ($record === null) {
-                $progress->skip('Import record is missing.');
-
-                continue;
+            if ($batch !== []) {
+                $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
             }
 
-            if ($this->isDuplicateAuctionItemId($record, $duplicateCacheKeyPrefix, $duplicateCacheExpiresAt)) {
-                $progress->skip("{$record->sourceData->auctionItemId}: duplicate AuctionItemId in source.");
+            $result = $progress->result();
 
-                continue;
+            if ($result->records > 0) {
+                Cache::forget(GetCarModelsTask::CACHE_KEY);
             }
 
-            $imageError = $this->validateCarImportImage->run($record, $imageSourcePath);
-
-            if ($imageError !== null) {
-                $progress->skip($imageError);
-
-                continue;
-            }
-
-            $batch[] = $record;
-
-            if (count($batch) < $batchSize) {
-                continue;
-            }
-
-            $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
-            $batch = [];
+            return $result;
+        } finally {
+            File::deleteDirectory($duplicateDirectory);
         }
-
-        if ($batch !== []) {
-            $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
-        }
-
-        $result = $progress->result();
-
-        if ($result->records > 0) {
-            Cache::forget(GetCarModelsTask::CACHE_KEY);
-        }
-
-        return $result;
     }
 
     /**
@@ -215,9 +219,7 @@ final readonly class ImportCarsAction
         $progress->addCopiedImages($result->records);
     }
 
-    /**
-     * @param list<CarImportData> $records
-     */
+    /** @param list<CarImportData> $records */
     private function copyImages(array $records, string $imageSourcePath, string $publicImagesPath): void
     {
         foreach ($records as $record) {
@@ -225,23 +227,36 @@ final readonly class ImportCarsAction
         }
     }
 
-    private function duplicateCacheTtl(): int
+    private function duplicateDirectory(): string
     {
-        $ttl = config('imports.cars.duplicate_cache_ttl');
+        $workPath = config('imports.cars.work_path');
 
-        if (!is_int($ttl) || $ttl < 1) {
-            throw new RuntimeException('CARS_IMPORT_DUPLICATE_CACHE_TTL must be a positive integer.');
+        if (!is_string($workPath) || $workPath === '') {
+            throw new RuntimeException('CARS_IMPORT_WORK_PATH must be configured.');
         }
 
-        return $ttl;
+        return rtrim($workPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'seen-' . Str::uuid();
     }
 
-    private function isDuplicateAuctionItemId(CarImportData $record, string $cacheKeyPrefix, \DateTimeInterface $expiresAt): bool
+    private function isDuplicateAuctionItemId(string $directory, string $auctionItemId): bool
     {
-        return !Cache::add(
-            "{$cacheKeyPrefix}:{$record->sourceData->auctionItemId}",
-            true,
-            $expiresAt,
-        );
+        $hash = hash('sha256', $auctionItemId);
+        $markerDirectory = $directory . DIRECTORY_SEPARATOR . substr($hash, 0, 2);
+        $markerPath = $markerDirectory . DIRECTORY_SEPARATOR . $hash;
+
+        File::ensureDirectoryExists($markerDirectory);
+        $handle = @fopen($markerPath, 'x');
+
+        if ($handle === false) {
+            if (is_file($markerPath)) {
+                return true;
+            }
+
+            throw new RuntimeException("Unable to record imported AuctionItemId {$auctionItemId}.");
+        }
+
+        fclose($handle);
+
+        return false;
     }
 }

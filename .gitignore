@@ -30,6 +30,9 @@
 /.idea/
 /.vscode/
 /.zed/
+/.editorconfig
+/.phpstorm.meta.php
+/_ide_helper.php
 .phpactor.json
 .DS_Store
 Thumbs.db

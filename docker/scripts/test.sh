@@ -21,4 +21,6 @@ if [ "${1:-}" = "artisan" ]; then
     exec php artisan "$@"
 fi
 
+php artisan migrate --force --no-interaction
+
 exec php artisan test "$@"

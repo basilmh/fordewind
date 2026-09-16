@@ -78,9 +78,9 @@ class ImportCarsCommandTest extends TestCase
         $this->assertSame('800.00', $car->winning_bid_amount->toDecimal());
         $this->assertSame(Currency::USD, $car->winning_bid_amount->currency);
         $this->assertFileExists($this->publicImagePath . '/145243/first-car.jpg');
-        $this->assertSame('first image', File::get($this->publicImagePath . '/145243/first-car.jpg'));
+        $this->assertSame($this->jpegContents(), File::get($this->publicImagePath . '/145243/first-car.jpg'));
         $this->assertFileExists($this->publicImagePath . '/145244/first-car.jpg');
-        $this->assertSame('first image', File::get($this->publicImagePath . '/145244/first-car.jpg'));
+        $this->assertSame($this->jpegContents(), File::get($this->publicImagePath . '/145244/first-car.jpg'));
 
         $passCar = Car::query()->where('auction_item_id', '145244')->firstOrFail();
         $this->assertSame(CarCustomStatus::PASS, $passCar->custom_status);
@@ -172,6 +172,45 @@ class ImportCarsCommandTest extends TestCase
     }
 
     #[Test]
+    #[TestDox('отклоняет файл с недопустимым расширением, даже если он существует в источнике')]
+    public function skipsRecordsWithNonJpegImageExtension(): void
+    {
+        $sourcePath = $this->createValidSourceFixture();
+        $this->writeJsonFixture($sourcePath . '/invalid-image-extension.json', $this->carPayload([
+            'AuctionItemId' => '145245',
+            'Image' => 'shell.php',
+        ]));
+        $this->writeImageFixture('shell.php');
+
+        $this->importFixture($sourcePath)
+            ->expectsOutputToContain('2 created, 0 updated.')
+            ->expectsOutputToContain('Skipped 1 record(s) during import.')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseMissing('cars', ['auction_item_id' => '145245']);
+        $this->assertFileDoesNotExist($this->publicImagePath . '/145245/shell.php');
+    }
+
+    #[Test]
+    #[TestDox('отклоняет JPEG по расширению, если его содержимое не является изображением')]
+    public function skipsRecordsWithInvalidJpegContents(): void
+    {
+        $sourcePath = $this->createValidSourceFixture();
+        $this->writeJsonFixture($sourcePath . '/invalid-jpeg.json', $this->carPayload([
+            'AuctionItemId' => '145245',
+            'Image' => 'invalid.jpg',
+        ]));
+        $this->writeImageFixture('invalid.jpg', 'not a jpeg');
+
+        $this->importFixture($sourcePath)
+            ->expectsOutputToContain('2 created, 0 updated.')
+            ->expectsOutputToContain('145245: image invalid.jpg is not a valid JPEG.')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseMissing('cars', ['auction_item_id' => '145245']);
+    }
+
+    #[Test]
     #[TestDox('отклоняет дублирующийся AuctionItemId и импортирует уникальные записи')]
     public function skipsDuplicateAuctionItemIdsAndImportsUniqueRecords(): void
     {
@@ -255,7 +294,13 @@ class ImportCarsCommandTest extends TestCase
         ]));
         File::partialMock()
             ->shouldReceive('copy')
-            ->andReturnUsing(static fn (string $_, string $destination): bool => !str_contains($destination, '/145244/'));
+            ->andReturnUsing(static function (string $source, string $destination): bool {
+                if (str_contains($destination, '/145244/')) {
+                    return false;
+                }
+
+                return file_put_contents($destination, file_get_contents($source)) !== false;
+            });
 
         $this->importFixture($sourcePath)
             ->expectsOutputToContain('1 created, 0 updated.')
@@ -305,7 +350,7 @@ class ImportCarsCommandTest extends TestCase
             'Status' => 4,
             'Image' => 'first-car.jpg',
         ]));
-        $this->writeImageFixture('first-car.jpg', 'first image');
+        $this->writeImageFixture('first-car.jpg');
 
         return $sourcePath;
     }
@@ -350,10 +395,21 @@ class ImportCarsCommandTest extends TestCase
         return $sourcePath;
     }
 
-    private function writeImageFixture(string $filename, string $contents): void
+    private function writeImageFixture(string $filename, ?string $contents = null): void
     {
         File::ensureDirectoryExists($this->imageSourcePath);
-        File::put($this->imageSourcePath . '/' . $filename, $contents);
+        File::put($this->imageSourcePath . '/' . $filename, $contents ?? $this->jpegContents());
+    }
+
+    private function jpegContents(): string
+    {
+        return base64_decode(
+            '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////'
+            . '2wBDAf//////////////////////////////////////////////////////////////////////////////////////'
+            . 'wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/'
+            . 'xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Ap//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IX//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
+            true,
+        ) ?: throw new \RuntimeException('Unable to decode JPEG fixture.');
     }
 
     /**

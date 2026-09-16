@@ -14,9 +14,16 @@ final class ValidateCarImportImageTask
         }
 
         $filename = $record->sourceData->imageFilename();
+        $imagePath = $sourcePath . DIRECTORY_SEPARATOR . $filename;
 
-        if (!is_file($sourcePath . DIRECTORY_SEPARATOR . $filename)) {
+        if (!is_file($imagePath) || !is_readable($imagePath)) {
             return "{$record->sourceData->auctionItemId}: image {$filename} is missing.";
+        }
+
+        $image = @getimagesize($imagePath);
+
+        if ($image === false || ($image['mime'] ?? null) !== 'image/jpeg') {
+            return "{$record->sourceData->auctionItemId}: image {$filename} is not a valid JPEG.";
         }
 
         return null;

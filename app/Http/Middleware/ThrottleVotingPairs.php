@@ -2,20 +2,20 @@
 
 namespace App\Http\Middleware;
 
-final class ThrottleVotingVotes extends ThrottleVotingRequests
+final class ThrottleVotingPairs extends ThrottleVotingRequests
 {
     protected function group(): string
     {
-        return 'votes';
+        return 'pairs';
     }
 
     protected function limitNames(): array
     {
-        return ['session_minute', 'session_hour', 'ip_minute'];
+        return ['session_minute', 'ip_minute'];
     }
 
     protected function errorMessage(): string
     {
-        return 'Too many voting requests.';
+        return 'Too many voting pair requests.';
     }
 }

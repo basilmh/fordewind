@@ -37,7 +37,7 @@ tasks:
       - mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
 
   init:
-    desc: Initialize the project from a fresh checkout
+    desc: Initialize the project, including the initial car import
     deps: [_check-env, _ensure-dirs]
     cmds:
       - task: up
@@ -45,6 +45,7 @@ tasks:
       - task: npm-install
       - task: key
       - task: migrate
+      - task: import
       - task: storage-link
       - task: build
 

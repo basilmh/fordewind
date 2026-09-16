@@ -80,7 +80,7 @@ final class ReadCarImportRecordsTask
             'Color' => ['required', 'string', 'max:64'],
             'Brand' => ['required', 'string', 'max:64'],
             'WinningBidAmount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
-            'Image' => ['required', 'string', 'max:255', 'regex:/^[^\\\\\/]+$/'],
+            'Image' => ['required', 'string', 'max:255', 'regex:/^[^\\\\\/]+\\.jpe?g$/i'],
         ])->validate();
     }
 }

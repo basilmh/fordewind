@@ -22,6 +22,7 @@ final readonly class GetCarStatisticsAction
             ->count('votes.id');
         $paginator = $carsQuery
             ->withCount('receivedVotes')
+            ->orderByDesc('received_votes_count')
             ->orderBy('model')
             ->orderBy('year')
             ->orderBy('id')

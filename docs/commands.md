@@ -6,7 +6,7 @@
 
 | Команда | Назначение |
 | --- | --- |
-| `task init` | Полностью подготовить проект после чистого клонирования |
+| `task init` | Полностью подготовить проект после чистого клонирования, включая импорт автомобилей |
 | `task up` | Собрать и запустить основные Docker-сервисы |
 | `task stop` | Остановить сервисы проекта |
 | `task ps` | Показать состояние контейнеров |
@@ -27,7 +27,9 @@
 
 `task fresh` удаляет данные только из основной dev БД.
 
-`task import` использует `CARS_IMPORT_REPOSITORY`, `CARS_IMPORT_SOURCE_PATH`, `CARS_IMPORT_BATCH_SIZE`, `CARS_IMPORT_IMAGES_PATH` и `CARS_PUBLIC_IMAGES_PATH`. Команда обрабатывает JSON чанками, пропускает некорректные записи и копирует файл в `public/images/cars/{auction_item_id}/{image_filename}`.
+`task init` требует доступ к `CARS_IMPORT_REPOSITORY`: после миграций он запускает `task import`, поэтому сайт сразу получает автомобили и изображения для голосования.
+
+`task import` использует `CARS_IMPORT_REPOSITORY`, `CARS_IMPORT_SOURCE_PATH`, `CARS_IMPORT_BATCH_SIZE`, `CARS_IMPORT_WORK_PATH`, `CARS_IMPORT_IMAGES_PATH` и `CARS_PUBLIC_IMAGES_PATH`. Команда обрабатывает JSON чанками, пропускает некорректные записи и публикует проверенные JPEG-файлы в `public/images/cars/{auction_item_id}/{image_filename}`.
 
 ## Frontend
 
