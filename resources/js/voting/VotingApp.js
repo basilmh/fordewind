@@ -22,6 +22,7 @@ export default class VotingApp
         this.isBusy = false;
         this.pairRequest = null;
         this.pairRequestSequence = 0;
+        this.zoomResizeTimer = null;
         this.models = [];
         this.elements = {
             cars: {
@@ -83,6 +84,15 @@ export default class VotingApp
                 this.closeRestartModal();
             }
         });
+        this.$(window).on('resize.votingZoom', () => {
+            clearTimeout(this.zoomResizeTimer);
+            this.zoomResizeTimer = setTimeout(() => {
+                if (!this.elements.pair.is('[hidden]')) {
+                    this.destroyZoom();
+                    this.initializeZoom();
+                }
+            }, 150);
+        });
     }
 
     messageFrom(response) {
@@ -117,8 +127,13 @@ export default class VotingApp
         }
 
         this.elements.pair.find('.zoomable-photo').each((_, image) => {
-            this.$(image).data('ezPlus')?.destroy();
+            const $image = this.$(image);
+
+            $image.data('ezPlus')?.destroy();
+
+            $image.off().removeData('ezPlus').removeData('zoom-image');
         });
+        this.$('.zoomContainer').remove();
     }
 
     initializeZoom() {
@@ -127,7 +142,8 @@ export default class VotingApp
         }
 
         this.elements.pair.find('.zoomable-photo').each((_, image) => {
-            const initialize = () => this.initializeImageZoom(image);
+            const $image = this.$(image);
+            const initialize = () => this.initializeImageZoom($image);
 
             if (image.complete && image.naturalWidth > 0) {
                 initialize();
@@ -135,13 +151,16 @@ export default class VotingApp
                 return;
             }
 
-            this.$(image).one('load.zoom', initialize);
+            $image.one('load.zoom', initialize);
         });
     }
 
-    initializeImageZoom(image) {
-        this.$(image).data('ezPlus')?.destroy();
-        this.$(image).ezPlus({
+    initializeImageZoom($image) {
+        if ($image.data('ezPlus')) {
+            return;
+        }
+
+        $image.ezPlus({
             cursor: 'crosshair',
             tint: true,
             tintColour: '#f1b24a',
@@ -149,6 +168,9 @@ export default class VotingApp
             // ezPlus uses a divisor: 0.5 renders a twofold enlarged image.
             zoomLevel: 0.5,
             zoomType: 'window',
+            zoomWindowHeight: 210,
+            zoomWindowPosition: 13,
+            zoomWindowWidth: 280,
         });
     }
 
@@ -157,8 +179,11 @@ export default class VotingApp
 
         elements.image.attr({
             alt: text.car.alt(car),
+            'data-zoom-image': car.imageUrl,
             src: car.imageUrl,
         });
+
+        elements.image.data('zoom-image', car.imageUrl);
         elements.title.text(text.car.title(car));
         elements.auction.text(text.car.auction(car));
     }
