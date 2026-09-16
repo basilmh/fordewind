@@ -12,5 +12,6 @@ final class CarModelData extends Data
     public function __construct(
         public string $model,
         public int $carsCount,
+        public bool $isVotable,
     ) {}
 }

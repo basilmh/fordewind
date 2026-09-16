@@ -24,7 +24,11 @@ final class VotingController extends Controller
     {
         return new CarModelsResponseData(
             $getCarModels->run()
-                ->map(static fn (array $model): CarModelData => new CarModelData($model['model'], $model['cars_count']))
+                ->map(static fn (array $model): CarModelData => new CarModelData(
+                    $model['model'],
+                    $model['cars_count'],
+                    $model['cars_count'] >= 2,
+                ))
                 ->values()
                 ->all(),
         );

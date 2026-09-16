@@ -26,8 +26,10 @@ class VotingApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.model', 'A4')
             ->assertJsonPath('data.0.cars_count', 1)
+            ->assertJsonPath('data.0.is_votable', false)
             ->assertJsonPath('data.1.model', 'X5')
-            ->assertJsonPath('data.1.cars_count', 2);
+            ->assertJsonPath('data.1.cars_count', 2)
+            ->assertJsonPath('data.1.is_votable', true);
     }
 
     #[Test]
@@ -59,12 +61,12 @@ class VotingApiTest extends TestCase
     #[TestDox('возвращает недоступное состояние для модели с одной фотографией')]
     public function returnsUnavailablePairWhenModelHasLessThanTwoCars(): void
     {
-        $this->createCars('X5', 1);
+        [$car] = $this->createCars('X5', 1);
 
         $this->getJson(route('api.voting.pair', ['model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'unavailable')
-            ->assertJsonPath('data.left_car', null)
+            ->assertJsonPath('data.left_car.id', $car->id)
             ->assertJsonPath('data.right_car', null);
     }
 
@@ -214,8 +216,9 @@ class VotingApiTest extends TestCase
     public function rateLimitsVoteSubmissionRequests(): void
     {
         Cache::flush();
+        config()->set('voting.rate_limits.ip_minute.max_attempts', 3);
 
-        for ($attempt = 0; $attempt < 20; $attempt++) {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
             $this->postJson(route('api.voting.votes.store'), [])
                 ->assertUnprocessable();
         }

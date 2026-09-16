@@ -1,0 +1,64 @@
+<div class="statistics-layout">
+    <section class="statistics-toolbar panel" :aria-label="text.filters.ariaLabel">
+        <div class="filter-field filter-model">
+            <label for="statistics-model">{{ text.filters.model }}</label>
+            <select id="statistics-model" v-model="filters.model" :disabled="loadingModels">
+                <option value="">{{ text.filters.allModels }}</option>
+                <option v-for="model in models" :key="model.name" :value="model.name">
+                    {{ text.filters.modelOption(model.name, model.carsCount) }}
+                </option>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="statistics-year-from">{{ text.filters.yearFrom }}</label>
+            <input id="statistics-year-from" v-model="filters.yearFrom" type="number" min="1900" :max="currentYear" :placeholder="text.filters.yearFromPlaceholder">
+        </div>
+        <div class="filter-field">
+            <label for="statistics-year-to">{{ text.filters.yearTo }}</label>
+            <input id="statistics-year-to" v-model="filters.yearTo" type="number" min="1900" :max="currentYear" :placeholder="String(currentYear)">
+        </div>
+        <button class="text-button" type="button" @click="resetFilters">{{ text.filters.reset }}</button>
+    </section>
+
+    <p v-if="yearError" class="status-message is-error">{{ yearError }}</p>
+    <p v-else-if="error" class="status-message is-error">{{ error }}</p>
+
+    <section class="statistics-summary" aria-live="polite">
+        <p>{{ text.summary.votes }}</p>
+        <strong>{{ totalVotes }}</strong>
+        <span v-if="result.meta">{{ text.summary.cars(result.meta.totalCars) }}</span>
+    </section>
+
+    <div v-if="loading" class="statistics-loader" aria-live="polite">{{ text.loader }}</div>
+
+    <div v-else-if="hasResults" class="car-grid">
+        <article v-for="car in result.cars" :key="car.id" class="stat-card">
+            <img :src="car.imageUrl" :alt="text.card.imageAlt(car)" loading="lazy">
+            <div class="stat-card-body">
+                <div class="stat-card-heading">
+                    <p>{{ car.year }} · {{ car.auctionItemId }}</p>
+                    <strong>{{ car.votesReceived }} <span>{{ text.card.votes }}</span></strong>
+                </div>
+                <h2>{{ car.make }} {{ car.model }}</h2>
+                <p class="price">{{ formatMoney(car.winningBidAmount) }}</p>
+                <dl>
+                    <div><dt>{{ text.card.mileage }}</dt><dd>{{ car.odometer.toLocaleString('ru-RU') }} {{ car.units }}</dd></div>
+                    <div><dt>{{ text.card.engine }}</dt><dd>{{ car.engine }}</dd></div>
+                    <div><dt>{{ text.card.transmission }}</dt><dd>{{ car.transmission }}</dd></div>
+                    <div><dt>{{ text.card.color }}</dt><dd>{{ car.color }}</dd></div>
+                </dl>
+            </div>
+        </article>
+    </div>
+
+    <div v-else-if="!yearError && !error" class="empty-state">
+        <p class="empty-state-title">{{ text.empty.title }}</p>
+        <p>{{ text.empty.copy }}</p>
+    </div>
+
+    <nav v-if="result.meta && result.meta.lastPage > 1" class="pagination" :aria-label="text.pagination.ariaLabel">
+        <button type="button" :disabled="result.meta.currentPage === 1" @click="loadStatistics(result.meta.currentPage - 1)">{{ text.pagination.previous }}</button>
+        <span>{{ text.pagination.page(result.meta.currentPage, result.meta.lastPage) }}</span>
+        <button type="button" :disabled="result.meta.currentPage === result.meta.lastPage" @click="loadStatistics(result.meta.currentPage + 1)">{{ text.pagination.next }}</button>
+    </nav>
+</div>

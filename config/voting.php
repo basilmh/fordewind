@@ -3,7 +3,7 @@
 return [
     'rate_limits' => [
         'session_minute' => [
-            'max_attempts' => (int) env('VOTING_VOTES_SESSION_PER_MINUTE', 8),
+            'max_attempts' => (int) env('VOTING_VOTES_SESSION_PER_MINUTE', 60),
             'decay_seconds' => (int) env('VOTING_VOTES_SESSION_MINUTE_WINDOW', 60),
         ],
         'session_hour' => [
@@ -11,7 +11,7 @@ return [
             'decay_seconds' => (int) env('VOTING_VOTES_SESSION_HOUR_WINDOW', 3600),
         ],
         'ip_minute' => [
-            'max_attempts' => (int) env('VOTING_VOTES_IP_PER_MINUTE', 20),
+            'max_attempts' => (int) env('VOTING_VOTES_IP_PER_MINUTE', 60),
             'decay_seconds' => (int) env('VOTING_VOTES_IP_MINUTE_WINDOW', 60),
         ],
     ],

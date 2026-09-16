@@ -73,8 +73,9 @@ task init
 
 Vue 3 подключён через `@vitejs/plugin-vue`. Отдельные entry points размещаются в `resources/js`:
 
-- jQuery и ezPlus используются только для области голосования;
-- Vue используется только для статистики.
+- [/vote](/vote) и главная страница используют `resources/js/vote.js`: jQuery загружает модели и пары, отправляет голос с CSRF-токеном, а ezPlus увеличивает фотографии в режиме Tints;
+- [/statistics](/statistics) использует Vue-компонент `resources/js/components/StatisticsApp.vue`: фильтры, debounce для годов, карточки, общий счётчик и пагинация обновляются через JSON API без перезагрузки;
+- по окончании цикла на странице голосования клиент вызывает `POST /api/voting/cycle`, получает новую session и новый CSRF-токен.
 
 Сборка frontend проверяется командой `task build`.
 

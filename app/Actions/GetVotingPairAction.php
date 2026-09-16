@@ -18,10 +18,15 @@ final readonly class GetVotingPairAction
 
     public function run(string $model): VotingPairData
     {
-        if (Car::query()->where('model', $model)->count() < 2) {
+        $modelCars = Car::query()
+            ->where('model', $model)
+            ->limit(2)
+            ->get();
+
+        if ($modelCars->count() < 2) {
             $this->forgetCurrentPairs($model);
 
-            return VotingPairData::unavailable($model);
+            return VotingPairData::unavailable($model, $modelCars->first());
         }
 
         $shownCarIds = $this->shownCarIds($model);

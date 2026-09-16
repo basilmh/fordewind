@@ -31,9 +31,15 @@ final class VotingPairData extends Data
         );
     }
 
-    public static function unavailable(string $model): self
+    public static function unavailable(string $model, ?Car $car = null): self
     {
-        return new self(VotingPairStatus::UNAVAILABLE, $model, null, null, null);
+        return new self(
+            VotingPairStatus::UNAVAILABLE,
+            $model,
+            $car === null ? null : VotingCarData::fromCar($car),
+            null,
+            null,
+        );
     }
 
     public static function exhausted(string $model): self

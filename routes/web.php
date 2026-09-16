@@ -5,9 +5,9 @@ use App\Http\Controllers\Api\VotingController;
 use App\Http\Middleware\ThrottleVotingVotes;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::view('/', 'vote')->name('home');
+Route::view('vote', 'vote')->name('vote');
+Route::view('statistics', 'statistics')->name('statistics');
 
 Route::prefix('api')->name('api.')->group(function (): void {
     Route::get('voting/models', [VotingController::class, 'models'])->name('voting.models');
