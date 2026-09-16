@@ -2,9 +2,9 @@
     <section class="statistics-toolbar panel" :aria-label="text.filters.ariaLabel">
         <div class="filter-field filter-model">
             <label for="statistics-model">{{ text.filters.model }}</label>
-            <select id="statistics-model" v-model="filters.model" :disabled="loadingModels">
+            <select id="statistics-model" v-model="filters.modelKey" :disabled="loadingModels">
                 <option value="">{{ text.filters.allModels }}</option>
-                <option v-for="model in models" :key="model.name" :value="model.name">
+                <option v-for="model in models" :key="model.key" :value="model.key">
                     {{ text.filters.modelOption(model.name, model.carsCount) }}
                 </option>
             </select>

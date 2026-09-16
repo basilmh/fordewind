@@ -25,6 +25,7 @@ final class VotingController extends Controller
         return new CarModelsResponseData(
             $getCarModels->run()
                 ->map(static fn (array $model): CarModelData => new CarModelData(
+                    $model['make'],
                     $model['model'],
                     $model['cars_count'],
                     $model['cars_count'] >= 2,
@@ -36,7 +37,7 @@ final class VotingController extends Controller
 
     public function pair(GetVotingPairData $data, GetVotingPairAction $getVotingPair): VotingPairResponseData
     {
-        return new VotingPairResponseData($getVotingPair->run($data->model));
+        return new VotingPairResponseData($getVotingPair->run($data->make, $data->model));
     }
 
     public function cycle(StartVotingCycleAction $startVotingCycle): JsonResponse
@@ -52,6 +53,7 @@ final class VotingController extends Controller
         GetVotingPairAction $getVotingPair,
     ): JsonResponse {
         $vote = $storeVote->run(
+            $data->make,
             $data->model,
             $data->leftCarId,
             $data->rightCarId,
@@ -61,7 +63,7 @@ final class VotingController extends Controller
 
         $response = new StoreVoteResponseData(
             data: VoteData::fromModel($vote),
-            nextPair: $getVotingPair->run($data->model),
+            nextPair: $getVotingPair->run($data->make, $data->model),
         );
 
         return response()->json($response->toArray(), JsonResponse::HTTP_CREATED);

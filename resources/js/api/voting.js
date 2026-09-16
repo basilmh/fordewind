@@ -61,6 +61,7 @@ function mapPair(value) {
 
     return {
         leftCar: mapNullableCar(pair.left_car),
+        make: string(pair.make),
         model: string(pair.model),
         pairToken: nullableString(pair.pair_token),
         rightCar: mapNullableCar(pair.right_car),

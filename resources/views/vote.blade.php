@@ -15,7 +15,7 @@
         </div>
 
         <div class="vote-controls panel">
-            <label for="vote-model">Модель автомобиля</label>
+            <label for="vote-model">Марка и модель</label>
             <select id="vote-model" disabled>
                 <option value="">Загружаем модели...</option>
             </select>

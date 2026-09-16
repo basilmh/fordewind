@@ -17,7 +17,7 @@ export default {
         const loading = ref(false);
         const loadingModels = ref(false);
         const error = ref('');
-        const filters = reactive({ model: '', yearFrom: '', yearTo: '' });
+        const filters = reactive({ modelKey: '', yearFrom: '', yearTo: '' });
         let yearTimer;
         let initialized = false;
         let statisticsAbortController;
@@ -57,7 +57,12 @@ export default {
         function query(page = 1) {
             const params = new URLSearchParams({ page: String(page), per_page: '12' });
 
-            if (filters.model) params.set('model', filters.model);
+            const selected = models.value.find((model) => model.key === filters.modelKey);
+
+            if (selected) {
+                params.set('make', selected.make);
+                params.set('model', selected.model);
+            }
             if (filters.yearFrom) params.set('year_from', filters.yearFrom);
             if (filters.yearTo) params.set('year_to', filters.yearTo);
 
@@ -118,8 +123,8 @@ export default {
                 models.value = mapCarModelsResponse(payload).models;
                 const savedModel = selectedModel();
 
-                if (savedModel && models.value.some((model) => model.name === savedModel)) {
-                    filters.model = savedModel;
+                if (savedModel && models.value.some((model) => model.key === savedModel)) {
+                    filters.modelKey = savedModel;
                 }
             } catch (response) {
                 error.value = errorMessage(response);
@@ -129,7 +134,7 @@ export default {
         }
 
         function resetFilters() {
-            filters.model = '';
+            filters.modelKey = '';
             filters.yearFrom = '';
             filters.yearTo = '';
         }
@@ -140,14 +145,14 @@ export default {
             return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(Number(value));
         }
 
-        watch(() => [filters.model, filters.yearFrom, filters.yearTo], ([model], [previousModel]) => {
+        watch(() => [filters.modelKey, filters.yearFrom, filters.yearTo], ([modelKey], [previousModelKey]) => {
             if (!initialized) {
                 return;
             }
 
             clearTimeout(yearTimer);
 
-            if (model !== previousModel) {
+            if (modelKey !== previousModelKey) {
                 void loadStatistics();
 
                 return;

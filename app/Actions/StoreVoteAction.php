@@ -18,6 +18,7 @@ final readonly class StoreVoteAction
     public function __construct(private Session $session) {}
 
     public function run(
+        string $make,
         string $model,
         int $leftCarId,
         int $rightCarId,
@@ -25,12 +26,14 @@ final readonly class StoreVoteAction
         string $pairToken,
     ): Vote {
         $pairTokenHash = hash('sha256', $pairToken);
-        $this->ensureCurrentPair($model, $leftCarId, $rightCarId, $pairTokenHash);
+        $cycleKey = $this->cycleKey($make, $model);
+        $this->ensureCurrentPair($cycleKey, $leftCarId, $rightCarId, $pairTokenHash);
 
         try {
-            return DB::transaction(function () use ($model, $leftCarId, $rightCarId, $winnerSide, $pairTokenHash): Vote {
+            return DB::transaction(function () use ($make, $model, $cycleKey, $leftCarId, $rightCarId, $winnerSide, $pairTokenHash): Vote {
                 $cars = Car::query()
                     ->whereKey([$leftCarId, $rightCarId])
+                    ->where('make', $make)
                     ->where('model', $model)
                     ->lockForUpdate()
                     ->get()
@@ -52,7 +55,7 @@ final readonly class StoreVoteAction
                     'pair_hash' => $this->pairHash($leftCarId, $rightCarId),
                 ]);
 
-                $this->forgetCurrentPair($model);
+                $this->forgetCurrentPair($cycleKey);
 
                 return $vote;
             });
@@ -68,10 +71,10 @@ final readonly class StoreVoteAction
         }
     }
 
-    private function ensureCurrentPair(string $model, int $leftCarId, int $rightCarId, string $pairTokenHash): void
+    private function ensureCurrentPair(string $cycleKey, int $leftCarId, int $rightCarId, string $pairTokenHash): void
     {
         $pairsByModel = $this->session->get(self::CURRENT_PAIR_SESSION_KEY, []);
-        $currentPair = is_array($pairsByModel) ? ($pairsByModel[$model] ?? null) : null;
+        $currentPair = is_array($pairsByModel) ? ($pairsByModel[$cycleKey] ?? null) : null;
 
         if (
             !is_array($currentPair)
@@ -85,7 +88,7 @@ final readonly class StoreVoteAction
         }
     }
 
-    private function forgetCurrentPair(string $model): void
+    private function forgetCurrentPair(string $cycleKey): void
     {
         $pairsByModel = $this->session->get(self::CURRENT_PAIR_SESSION_KEY, []);
 
@@ -93,7 +96,7 @@ final readonly class StoreVoteAction
             return;
         }
 
-        unset($pairsByModel[$model]);
+        unset($pairsByModel[$cycleKey]);
 
         $this->session->put(self::CURRENT_PAIR_SESSION_KEY, $pairsByModel);
     }
@@ -109,5 +112,10 @@ final readonly class StoreVoteAction
         sort($carIds);
 
         return hash('sha256', "{$carIds[0]}:{$carIds[1]}");
+    }
+
+    private function cycleKey(string $make, string $model): string
+    {
+        return "{$make}\0{$model}";
     }
 }

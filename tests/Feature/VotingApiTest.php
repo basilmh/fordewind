@@ -24,12 +24,32 @@ class VotingApiTest extends TestCase
 
         $this->getJson(route('api.voting.models'))
             ->assertOk()
+            ->assertJsonPath('data.0.make', 'BMW')
             ->assertJsonPath('data.0.model', 'A4')
             ->assertJsonPath('data.0.cars_count', 1)
             ->assertJsonPath('data.0.is_votable', false)
             ->assertJsonPath('data.1.model', 'X5')
             ->assertJsonPath('data.1.cars_count', 2)
             ->assertJsonPath('data.1.is_votable', true);
+    }
+
+    #[Test]
+    #[TestDox('разделяет одинаковые модели разных марок в списке и паре голосования')]
+    public function separatesSameModelFromDifferentMakes(): void
+    {
+        $this->createCars('X5', 2, [], 'BMW');
+        [$leftCar, $rightCar] = $this->createCars('X5', 2, [], 'Toyota');
+
+        $this->getJson(route('api.voting.models'))
+            ->assertOk()
+            ->assertJsonFragment(['make' => 'BMW', 'model' => 'X5', 'cars_count' => 2])
+            ->assertJsonFragment(['make' => 'Toyota', 'model' => 'X5', 'cars_count' => 2]);
+
+        $pair = $this->getJson(route('api.voting.pair', ['make' => 'Toyota', 'model' => 'X5']))
+            ->assertOk()
+            ->assertJsonPath('data.make', 'Toyota');
+
+        $this->assertEqualsCanonicalizing([$leftCar->id, $rightCar->id], $this->pairIds($pair->json('data')));
     }
 
     #[Test]
@@ -40,7 +60,7 @@ class VotingApiTest extends TestCase
         $pairToken = str_repeat('a', 64);
 
         $this->withSession($this->currentPairSession('X5', $leftCar, $rightCar, $pairToken))
-            ->getJson(route('api.voting.pair', ['model' => 'X5']))
+            ->getJson(route('api.voting.pair', ['make' => 'BMW', 'model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'ready')
             ->assertJsonPath('data.pair_token', $pairToken)
@@ -54,7 +74,7 @@ class VotingApiTest extends TestCase
     {
         [$car] = $this->createCars('X5', 1);
 
-        $this->getJson(route('api.voting.pair', ['model' => 'X5']))
+        $this->getJson(route('api.voting.pair', ['make' => 'BMW', 'model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'unavailable')
             ->assertJsonPath('data.left_car.id', $car->id)
@@ -68,14 +88,14 @@ class VotingApiTest extends TestCase
         [$firstCar, $secondCar, $lastCar] = $this->createCars('X5', 3);
 
         $pair = $this->withSession($this->cycleSession('X5', $firstCar, $secondCar, 2, 3))
-            ->getJson(route('api.voting.pair', ['model' => 'X5']))
+            ->getJson(route('api.voting.pair', ['make' => 'BMW', 'model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'ready');
 
         $this->assertContains($lastCar->id, $this->pairIds($pair->json('data')));
 
         $this->withSession($this->cycleSession('X5', $firstCar, $lastCar, 3, 3))
-            ->getJson(route('api.voting.pair', ['model' => 'X5']))
+            ->getJson(route('api.voting.pair', ['make' => 'BMW', 'model' => 'X5']))
             ->assertOk()
             ->assertJsonPath('data.status', 'exhausted')
             ->assertJsonPath('data.pair_token', null);
@@ -138,6 +158,7 @@ class VotingApiTest extends TestCase
 
         $this->withSession($this->currentPairSession('X5', $leftCar, $rightCar, $pairToken))
             ->postJson(route('api.voting.votes.store'), [
+            'make' => 'BMW',
             'model' => 'X5',
             'left_car_id' => $leftCar->id,
             'right_car_id' => $rightCar->id,
@@ -163,6 +184,7 @@ class VotingApiTest extends TestCase
 
         $this->withSession($this->currentPairSession('X5', $leftCar, $rightCar, $pairToken))
             ->postJson(route('api.voting.votes.store'), [
+            'make' => 'BMW',
             'model' => 'X5',
             'left_car_id' => $leftCar->id,
             'right_car_id' => $forgedCar->id,
@@ -185,6 +207,7 @@ class VotingApiTest extends TestCase
 
         $this->withSession($session)
             ->postJson(route('api.voting.votes.store'), [
+                'make' => 'BMW',
                 'model' => 'X5',
                 'left_car_id' => $staleLeftCar->id,
                 'right_car_id' => $staleRightCar->id,
@@ -204,6 +227,7 @@ class VotingApiTest extends TestCase
         [$leftCar, $rightCar] = $this->createCars('X5', 2);
         $pairToken = str_repeat('a', 64);
         $payload = [
+            'make' => 'BMW',
             'model' => 'X5',
             'left_car_id' => $leftCar->id,
             'right_car_id' => $rightCar->id,
@@ -251,11 +275,11 @@ class VotingApiTest extends TestCase
         $this->createCars('X5', 2);
 
         for ($attempt = 0; $attempt < 2; $attempt++) {
-            $this->getJson(route('api.voting.pair', ['model' => 'X5']))
+            $this->getJson(route('api.voting.pair', ['make' => 'BMW', 'model' => 'X5']))
                 ->assertOk();
         }
 
-        $this->getJson(route('api.voting.pair', ['model' => 'X5']))
+        $this->getJson(route('api.voting.pair', ['make' => 'BMW', 'model' => 'X5']))
             ->assertTooManyRequests()
             ->assertJsonPath('message', 'Too many voting pair requests.')
             ->assertJsonPath('errors', []);
@@ -316,12 +340,13 @@ class VotingApiTest extends TestCase
      * @param list<int> $years
      * @return list<Car>
      */
-    private function createCars(string $model, int $count, array $years = []): array
+    private function createCars(string $model, int $count, array $years = [], string $make = 'BMW'): array
     {
         $cars = [];
 
         for ($index = 0; $index < $count; $index++) {
             $cars[] = Car::factory()->create([
+                'make' => $make,
                 'model' => $model,
                 'year' => $years[$index] ?? 2000 + $index,
             ]);
@@ -345,7 +370,7 @@ class VotingApiTest extends TestCase
     {
         return [
             'voting.current_pair_by_model' => [
-                $model => [
+                "BMW\0{$model}" => [
                     'car_ids' => [$leftCar->id, $rightCar->id],
                     'pair_token' => $pairToken,
                 ],
@@ -358,7 +383,7 @@ class VotingApiTest extends TestCase
     {
         return [
             'voting.cycles_by_model' => [
-                $model => [
+                "BMW\0{$model}" => [
                     'first_car_id' => $firstCar->id,
                     'last_car_id' => $lastCar->id,
                     'shown_cars_count' => $shownCarsCount,

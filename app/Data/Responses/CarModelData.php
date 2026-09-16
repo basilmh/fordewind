@@ -10,6 +10,7 @@ use Spatie\LaravelData\Mappers\SnakeCaseMapper;
 final class CarModelData extends Data
 {
     public function __construct(
+        public string $make,
         public string $model,
         public int $carsCount,
         public bool $isVotable,

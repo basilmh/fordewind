@@ -19,9 +19,9 @@ export default {
         yearTo: (year) => `Год «до» должен быть между 1900 и ${year}.`,
     },
     filters: {
-        allModels: 'Все модели',
+        allModels: 'Все марки и модели',
         ariaLabel: 'Фильтры статистики',
-        model: 'Модель',
+        model: 'Марка и модель',
         modelOption: (model, count) => `${model} · ${count} авто`,
         reset: 'Сбросить',
         yearFrom: 'Год от',

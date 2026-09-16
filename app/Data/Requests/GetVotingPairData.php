@@ -11,6 +11,8 @@ use Spatie\LaravelData\Mappers\SnakeCaseMapper;
 final class GetVotingPairData extends Data
 {
     public function __construct(
+        #[Validation\Required, Validation\StringType, Validation\Max(100), Validation\Exists('cars', 'make')]
+        public string $make,
         #[Validation\Required, Validation\StringType, Validation\Max(100), Validation\Exists('cars', 'model')]
         public string $model,
     ) {}

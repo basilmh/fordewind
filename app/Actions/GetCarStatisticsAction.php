@@ -13,6 +13,7 @@ final readonly class GetCarStatisticsAction
     public function run(StatisticsFilterData $filters): CarStatisticsResultData
     {
         $carsQuery = Car::query()
+            ->when($filters->make !== null, fn ($query) => $query->where('make', $filters->make))
             ->when($filters->model !== null, fn ($query) => $query->where('model', $filters->model))
             ->when($filters->yearFrom !== null, fn ($query) => $query->where('year', '>=', $filters->yearFrom))
             ->when($filters->yearTo !== null, fn ($query) => $query->where('year', '<=', $filters->yearTo));

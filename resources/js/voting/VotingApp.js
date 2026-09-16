@@ -22,6 +22,7 @@ export default class VotingApp
         this.isBusy = false;
         this.pairRequest = null;
         this.pairRequestSequence = 0;
+        this.models = [];
         this.elements = {
             cars: {
                 left: {
@@ -126,15 +127,30 @@ export default class VotingApp
         }
 
         this.elements.pair.find('.zoomable-photo').each((_, image) => {
-            this.$(image).ezPlus({
+            const initialize = () => this.initializeImageZoom(image);
+
+            if (image.complete && image.naturalWidth > 0) {
+                initialize();
+
+                return;
+            }
+
+            this.$(image).one('load.zoom', initialize);
+        });
+    }
+
+    initializeImageZoom(image) {
+        this.$(image).data('ezPlus')?.destroy();
+        this.$(image).ezPlus({
                 cursor: 'crosshair',
                 easing: true,
                 tint: true,
                 tintColour: '#f1b24a',
                 tintOpacity: 0.32,
-                zoomType: 'inner',
+                zoomLevel: 1.6,
+                zoomType: 'window',
+                zoomWindowPosition: 1,
             });
-        });
     }
 
     renderCar(side, car) {
@@ -210,12 +226,12 @@ export default class VotingApp
     }
 
     loadPair() {
-        const model = this.elements.model.val();
+        const selectedModel = this.models.find((model) => model.key === this.elements.model.val());
         const requestId = ++this.pairRequestSequence;
 
         this.pairRequest?.abort();
 
-        if (!model) {
+        if (!selectedModel) {
             this.setBusy(false);
             this.showEmpty(text.empty.noModel);
 
@@ -230,7 +246,10 @@ export default class VotingApp
         this.setBusy(true);
         this.showNotice(text.notices.loadingPair, 'loading');
 
-        this.pairRequest = this.$.getJSON(api.pair, { model })
+        this.pairRequest = this.$.getJSON(api.pair, {
+            make: selectedModel.make,
+            model: selectedModel.model,
+        })
             .done((payload) => {
                 if (requestId === this.pairRequestSequence) {
                     try {
@@ -276,18 +295,20 @@ export default class VotingApp
                     value: '',
                 }));
 
+                this.models = response.models;
+
                 response.models.forEach((model) => {
                     this.elements.model.append(this.$('<option>', {
                         text: model.isVotable
                             ? text.models.option(model.name, model.carsCount)
                             : text.models.unavailableOption(model.name, model.carsCount),
-                        value: model.name,
+                        value: model.key,
                     }));
                 });
 
                 const savedModel = selectedModel();
 
-                if (savedModel && response.models.some((model) => model.name === savedModel)) {
+                if (savedModel && response.models.some((model) => model.key === savedModel)) {
                     this.elements.model.val(savedModel);
                 }
 
@@ -320,6 +341,7 @@ export default class VotingApp
             contentType: 'application/json',
             data: JSON.stringify({
                 left_car_id: this.currentPair.leftCar.id,
+                make: this.currentPair.make,
                 model: this.currentPair.model,
                 pair_token: this.currentPair.pairToken,
                 right_car_id: this.currentPair.rightCar.id,

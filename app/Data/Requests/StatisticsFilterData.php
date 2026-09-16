@@ -14,6 +14,8 @@ use Spatie\LaravelData\Mappers\SnakeCaseMapper;
 final class StatisticsFilterData extends Data
 {
     public function __construct(
+        #[Validation\Nullable, Validation\StringType, Validation\Max(100), Validation\Exists('cars', 'make')]
+        public ?string $make,
         #[Validation\Nullable, Validation\StringType, Validation\Max(100), Validation\Exists('cars', 'model')]
         public ?string $model,
         #[Validation\Nullable, Validation\IntegerType, Validation\Min(1900)]
