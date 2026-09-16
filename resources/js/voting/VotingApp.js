@@ -142,15 +142,14 @@ export default class VotingApp
     initializeImageZoom(image) {
         this.$(image).data('ezPlus')?.destroy();
         this.$(image).ezPlus({
-                cursor: 'crosshair',
-                easing: true,
-                tint: true,
-                tintColour: '#f1b24a',
-                tintOpacity: 0.32,
-                zoomLevel: 1.6,
-                zoomType: 'window',
-                zoomWindowPosition: 1,
-            });
+            cursor: 'crosshair',
+            tint: true,
+            tintColour: '#f1b24a',
+            tintOpacity: 0.32,
+            // ezPlus uses a divisor: 0.5 renders a twofold enlarged image.
+            zoomLevel: 0.5,
+            zoomType: 'window',
+        });
     }
 
     renderCar(side, car) {
