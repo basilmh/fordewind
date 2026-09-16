@@ -69,7 +69,7 @@ final class ReadCarImportRecordsTask
             'CurrentHighPreBid' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
             'CustomStatus' => ['required', Rule::enum(CarCustomStatus::class)],
             'MyPreBid' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
-            'Year' => ['required', 'integer', 'between:0,65535'],
+            'Year' => ['required', 'integer', 'between:1900,' . now()->year],
             'Make' => ['required', 'string', 'max:100'],
             'Model' => ['required', 'string', 'max:100'],
             'Odometer' => ['required', 'integer', 'min:0'],

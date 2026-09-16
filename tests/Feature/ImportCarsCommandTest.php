@@ -5,11 +5,13 @@ namespace Tests\Feature;
 use App\Enums\CarCustomStatus;
 use App\Enums\Currency;
 use App\Models\Car;
+use App\Tasks\GetCarModelsTask;
 use App\ValueObjects\Money;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Testing\PendingCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -52,12 +54,14 @@ class ImportCarsCommandTest extends TestCase
     public function importsJsonRecordsAndCopiesImagesToCarDirectory(): void
     {
         config()->set('imports.cars.batch_size', 1);
+        Cache::put(GetCarModelsTask::CACHE_KEY, 'stale models', now()->addDay());
 
         $this->importFixture($this->createValidSourceFixture())
             ->expectsOutputToContain('2 created, 0 updated.')
             ->expectsOutputToContain("Copied 2 image(s) to {$this->publicImagePath}.")
             ->assertExitCode(0);
 
+        $this->assertFalse(Cache::has(GetCarModelsTask::CACHE_KEY));
         $this->assertDatabaseCount('cars', 2);
         $this->assertDatabaseHas('cars', [
             'auction_item_id' => '145243',
@@ -113,6 +117,24 @@ class ImportCarsCommandTest extends TestCase
 
         $this->assertDatabaseCount('cars', 2);
         $this->assertFileExists($this->publicImagePath . '/145243/first-car.jpg');
+    }
+
+    #[Test]
+    #[TestDox('пропускает записи с годом вне диапазона от 1900 года до текущего')]
+    public function skipsRecordsWithYearOutsideTheAllowedRange(): void
+    {
+        $sourcePath = $this->createValidSourceFixture();
+        $this->writeJsonFixture($sourcePath . '/invalid-year.json', $this->carPayload([
+            'AuctionItemId' => '145245',
+            'Year' => now()->year + 1,
+        ]));
+
+        $this->importFixture($sourcePath)
+            ->expectsOutputToContain('2 created, 0 updated.')
+            ->expectsOutputToContain('Skipped 1 record(s) during import.')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseMissing('cars', ['auction_item_id' => '145245']);
     }
 
     #[Test]
@@ -221,6 +243,29 @@ class ImportCarsCommandTest extends TestCase
         } finally {
             $simulateFailure = false;
         }
+    }
+
+    #[Test]
+    #[TestDox('изолирует ошибку копирования изображения внутри batch')]
+    public function isolatesImageCopyFailuresWithinBatch(): void
+    {
+        $sourcePath = $this->createValidSourceFixture();
+        $this->writeJsonFixture($sourcePath . '/second-car.json', $this->carPayload([
+            'AuctionItemId' => '145244',
+        ]));
+        File::partialMock()
+            ->shouldReceive('copy')
+            ->andReturnUsing(static fn (string $_, string $destination): bool => !str_contains($destination, '/145244/'));
+
+        $this->importFixture($sourcePath)
+            ->expectsOutputToContain('1 created, 0 updated.')
+            ->expectsOutputToContain('Copied 1 image(s) to ' . $this->publicImagePath . '.')
+            ->expectsOutputToContain('Skipped 1 record(s) during import.')
+            ->expectsOutputToContain('145244: image copy failed.')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseHas('cars', ['auction_item_id' => '145243']);
+        $this->assertDatabaseMissing('cars', ['auction_item_id' => '145244']);
     }
 
     private function importFixture(string $sourcePath): PendingCommand

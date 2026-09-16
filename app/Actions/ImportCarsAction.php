@@ -8,15 +8,17 @@ use App\Data\CarImportResultData;
 use App\Models\Car;
 use App\Support\CarImportProgress;
 use App\Tasks\CopyCarImagesTask;
+use App\Tasks\GetCarModelsTask;
 use App\Tasks\ReadCarImportRecordsTask;
 use App\Tasks\ValidateCarImportImageTask;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 final readonly class ImportCarsAction
 {
-    private const string SEEN_AUCTION_ITEM_IDS_TABLE = 'car_import_seen_auction_item_ids';
-
     public function __construct(
         private ReadCarImportRecordsTask $readCarImportRecords,
         private ValidateCarImportImageTask $validateCarImportImage,
@@ -31,57 +33,59 @@ final readonly class ImportCarsAction
     ): CarImportResultData {
         $progress = new CarImportProgress;
         $batch = [];
+        $duplicateCacheKeyPrefix = 'car-import:seen:' . Str::uuid();
+        $duplicateCacheExpiresAt = now()->addSeconds($this->duplicateCacheTtl());
 
-        $this->createSeenAuctionItemIdsTable();
+        foreach ($this->readCarImportRecords->run($sourcePath) as $readResult) {
+            if ($readResult->error !== null) {
+                $progress->skip($readResult->error);
 
-        try {
-            foreach ($this->readCarImportRecords->run($sourcePath) as $readResult) {
-                if ($readResult->error !== null) {
-                    $progress->skip($readResult->error);
-
-                    continue;
-                }
-
-                $record = $readResult->record;
-
-                if ($record === null) {
-                    $progress->skip('Import record is missing.');
-
-                    continue;
-                }
-
-                if ($this->isDuplicateAuctionItemId($record)) {
-                    $progress->skip("{$record->sourceData->auctionItemId}: duplicate AuctionItemId in source.");
-
-                    continue;
-                }
-
-                $imageError = $this->validateCarImportImage->run($record, $imageSourcePath);
-
-                if ($imageError !== null) {
-                    $progress->skip($imageError);
-
-                    continue;
-                }
-
-                $batch[] = $record;
-
-                if (count($batch) < $batchSize) {
-                    continue;
-                }
-
-                $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
-                $batch = [];
+                continue;
             }
 
-            if ($batch !== []) {
-                $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
+            $record = $readResult->record;
+
+            if ($record === null) {
+                $progress->skip('Import record is missing.');
+
+                continue;
             }
-        } finally {
-            $this->dropSeenAuctionItemIdsTable();
+
+            if ($this->isDuplicateAuctionItemId($record, $duplicateCacheKeyPrefix, $duplicateCacheExpiresAt)) {
+                $progress->skip("{$record->sourceData->auctionItemId}: duplicate AuctionItemId in source.");
+
+                continue;
+            }
+
+            $imageError = $this->validateCarImportImage->run($record, $imageSourcePath);
+
+            if ($imageError !== null) {
+                $progress->skip($imageError);
+
+                continue;
+            }
+
+            $batch[] = $record;
+
+            if (count($batch) < $batchSize) {
+                continue;
+            }
+
+            $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
+            $batch = [];
         }
 
-        return $progress->result();
+        if ($batch !== []) {
+            $this->addImportedBatchToProgress($progress, $batch, $imageSourcePath, $publicImagesPath);
+        }
+
+        $result = $progress->result();
+
+        if ($result->records > 0) {
+            Cache::forget(GetCarModelsTask::CACHE_KEY);
+        }
+
+        return $result;
     }
 
     /**
@@ -93,11 +97,13 @@ final readonly class ImportCarsAction
         string $publicImagesPath,
     ): CarImportBatchResultData {
         try {
-            $result = $this->persistBatch($records);
-            $this->copyImages($records, $imageSourcePath, $publicImagesPath);
+            return DB::transaction(function () use ($records, $imageSourcePath, $publicImagesPath): CarImportBatchResultData {
+                $result = $this->persistBatch($records);
+                $this->copyImages($records, $imageSourcePath, $publicImagesPath);
 
-            return $result;
-        } catch (QueryException) {
+                return $result;
+            });
+        } catch (QueryException|RuntimeException) {
             return $this->importRecordsIndividually($records, $imageSourcePath, $publicImagesPath);
         }
     }
@@ -107,51 +113,49 @@ final readonly class ImportCarsAction
      */
     private function persistBatch(array $records): CarImportBatchResultData
     {
-        return DB::transaction(function () use ($records): CarImportBatchResultData {
-            $auctionItemIds = array_map(
-                static fn (CarImportData $record): string => $record->sourceData->auctionItemId,
+        $auctionItemIds = array_map(
+            static fn (CarImportData $record): string => $record->sourceData->auctionItemId,
+            $records,
+        );
+        $existingLookup = array_fill_keys(
+            Car::query()->whereIn('auction_item_id', $auctionItemIds)->pluck('auction_item_id')->all(),
+            true,
+        );
+        $created = count(array_filter(
+            $auctionItemIds,
+            static fn (string $auctionItemId): bool => !isset($existingLookup[$auctionItemId]),
+        ));
+
+        Car::query()->upsert(
+            array_map(
+                static fn (CarImportData $record): array => $record->toDatabaseValues(),
                 $records,
-            );
-            $existingLookup = array_fill_keys(
-                Car::query()->whereIn('auction_item_id', $auctionItemIds)->pluck('auction_item_id')->all(),
-                true,
-            );
-            $created = count(array_filter(
-                $auctionItemIds,
-                static fn (string $auctionItemId): bool => !isset($existingLookup[$auctionItemId]),
-            ));
+            ),
+            ['auction_item_id'],
+            [
+                'current_high_pre_bid',
+                'custom_status',
+                'my_pre_bid',
+                'year',
+                'make',
+                'model',
+                'odometer',
+                'units',
+                'vehicle_location',
+                'engine',
+                'transmission',
+                'color',
+                'brand',
+                'winning_bid_amount',
+                'image_filename',
+            ],
+        );
 
-            Car::query()->upsert(
-                array_map(
-                    static fn (CarImportData $record): array => $record->toDatabaseValues(),
-                    $records,
-                ),
-                ['auction_item_id'],
-                [
-                    'current_high_pre_bid',
-                    'custom_status',
-                    'my_pre_bid',
-                    'year',
-                    'make',
-                    'model',
-                    'odometer',
-                    'units',
-                    'vehicle_location',
-                    'engine',
-                    'transmission',
-                    'color',
-                    'brand',
-                    'winning_bid_amount',
-                    'image_filename',
-                ],
-            );
-
-            return new CarImportBatchResultData(
-                count($records),
-                $created,
-                count($records) - $created,
-            );
-        });
+        return new CarImportBatchResultData(
+            count($records),
+            $created,
+            count($records) - $created,
+        );
     }
 
     /**
@@ -170,14 +174,21 @@ final readonly class ImportCarsAction
 
         foreach ($records as $record) {
             try {
-                $result = $this->persistBatch([$record]);
-                $this->copyCarImages->run($record, $imageSourcePath, $publicImagesPath);
+                $result = DB::transaction(function () use ($record, $imageSourcePath, $publicImagesPath): CarImportBatchResultData {
+                    $result = $this->persistBatch([$record]);
+                    $this->copyCarImages->run($record, $imageSourcePath, $publicImagesPath);
+
+                    return $result;
+                });
                 $importedRecords += $result->records;
                 $created += $result->created;
                 $updated += $result->updated;
             } catch (QueryException) {
                 $skippedRecords++;
                 $skippedErrorSamples[] = "{$record->sourceData->auctionItemId}: database persistence failed.";
+            } catch (RuntimeException) {
+                $skippedRecords++;
+                $skippedErrorSamples[] = "{$record->sourceData->auctionItemId}: image copy failed.";
             }
         }
 
@@ -214,23 +225,23 @@ final readonly class ImportCarsAction
         }
     }
 
-    private function createSeenAuctionItemIdsTable(): void
+    private function duplicateCacheTtl(): int
     {
-        DB::statement(
-            'CREATE TEMPORARY TABLE ' . self::SEEN_AUCTION_ITEM_IDS_TABLE
-            . ' (auction_item_id VARCHAR(32) NOT NULL PRIMARY KEY)',
+        $ttl = config('imports.cars.duplicate_cache_ttl');
+
+        if (!is_int($ttl) || $ttl < 1) {
+            throw new RuntimeException('CARS_IMPORT_DUPLICATE_CACHE_TTL must be a positive integer.');
+        }
+
+        return $ttl;
+    }
+
+    private function isDuplicateAuctionItemId(CarImportData $record, string $cacheKeyPrefix, \DateTimeInterface $expiresAt): bool
+    {
+        return !Cache::add(
+            "{$cacheKeyPrefix}:{$record->sourceData->auctionItemId}",
+            true,
+            $expiresAt,
         );
-    }
-
-    private function dropSeenAuctionItemIdsTable(): void
-    {
-        DB::statement('DROP TEMPORARY TABLE IF EXISTS ' . self::SEEN_AUCTION_ITEM_IDS_TABLE);
-    }
-
-    private function isDuplicateAuctionItemId(CarImportData $record): bool
-    {
-        return DB::table(self::SEEN_AUCTION_ITEM_IDS_TABLE)->insertOrIgnore([
-            'auction_item_id' => $record->sourceData->auctionItemId,
-        ]) === 0;
     }
 }

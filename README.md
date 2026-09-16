@@ -51,8 +51,10 @@ task init
 - `CARS_IMPORT_REPOSITORY` - URL Git-репозитория с исходными JSON;
 - `CARS_IMPORT_SOURCE_PATH` - каталог, в который `task import` клонирует репозиторий и из которого читает JSON.
 - `CARS_IMPORT_BATCH_SIZE` - размер чанка импорта, по умолчанию `200`;
+- `CARS_IMPORT_DUPLICATE_CACHE_TTL` - TTL ключей дедупликации `AuctionItemId` в рамках запуска импорта, по умолчанию `86400` секунд;
 - `CARS_IMPORT_IMAGES_PATH` - каталог JPG-изображений в источнике; если не задан, используется `CARS_IMPORT_SOURCE_PATH`;
 - `CARS_PUBLIC_IMAGES_PATH` - каталог назначения изображений в `public`;
+- `VOTING_VOTES_*` - количество запросов и длина окон rate limit для голосования; полный набор и значения по умолчанию перечислены в `.env.example`.
 
 Не добавляйте `.env` в Git. Шаблон содержит только локальные значения разработки без реальных секретов.
 
@@ -75,6 +77,20 @@ Vue 3 подключён через `@vitejs/plugin-vue`. Отдельные ent
 - Vue используется только для статистики.
 
 Сборка frontend проверяется командой `task build`.
+
+## JSON API
+
+API размещён в `web` middleware под префиксом `/api`: это сохраняет анонимную Laravel-session для цикла голосования и стандартную CSRF-защиту для `POST`-запроса.
+
+| Метод и путь | Назначение |
+| --- | --- |
+| `GET /api/voting/models` | Доступные модели и количество автомобилей каждой модели |
+| `GET /api/voting/pair?model={model}` | Следующая пара для модели; ответ содержит `status: ready`, `unavailable` или `exhausted` |
+| `POST /api/voting/cycle` | Начинает новый цикл в новой Laravel-session и возвращает новый `csrf_token` |
+| `POST /api/voting/votes` | Сохраняет голос текущей пары и возвращает `nextPair` |
+| `GET /api/statistics` | Статистика с `model`, `year_from`, `year_to`, `page` и `per_page` |
+
+Ответ готовой пары содержит одноразовый `pair_token`. Для сохранения голоса передаются `model`, `left_car_id`, `right_car_id`, `winner_side` (`left` или `right`) и этот `pair_token`. Сервер принимает только пару, ранее выданную той же session, не допускает повторной отправки токена и повторного выбора одной пары в пределах анонимной сессии. В БД сохраняется HMAC session ID, а не исходный идентификатор сессии. Частота отправки ограничена по session и IP; без авторизации это базовая защита, а не абсолютная защита от пользователя, который может менять IP и cookies. Все JSON-поля используют `snake_case`: например, ответ голоса содержит `next_pair`, а статистика - `votes_received` и `total_votes`. Ошибки API имеют единый вид: `message` и `errors`.
 
 ## Использование ИИ
 

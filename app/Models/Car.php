@@ -5,8 +5,12 @@ namespace App\Models;
 use App\Casts\MoneyCast;
 use App\Enums\CarCustomStatus;
 use App\ValueObjects\Money;
+use Database\Factories\CarFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -53,10 +57,19 @@ use Illuminate\Support\Carbon;
  * @method static Builder<static>|Car whereWinningBidAmount($value)
  * @method static Builder<static>|Car whereYear($value)
  *
+ * @property-read Collection<int, Vote> $lostVotes
+ * @property-read int|null $lost_votes_count
+ * @property-read Collection<int, Vote> $receivedVotes
+ * @property-read int|null $received_votes_count
+ *
+ * @method static CarFactory factory($count = null, $state = [])
+ *
  * @mixin \Eloquent
  */
 class Car extends Model
 {
+    use HasFactory;
+
     protected $guarded = ['id'];
 
     protected function casts(): array
@@ -67,5 +80,17 @@ class Car extends Model
             'winning_bid_amount' => MoneyCast::class,
             'custom_status' => CarCustomStatus::class,
         ];
+    }
+
+    /** @return HasMany<Vote, $this> */
+    public function receivedVotes(): HasMany
+    {
+        return $this->hasMany(Vote::class, 'winner_car_id');
+    }
+
+    /** @return HasMany<Vote, $this> */
+    public function lostVotes(): HasMany
+    {
+        return $this->hasMany(Vote::class, 'loser_car_id');
     }
 }
